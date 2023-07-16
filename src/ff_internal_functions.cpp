@@ -25,6 +25,7 @@ using namespace Rcpp;
 // @return FF test statistic
 template<typename MatrixT>
 long testStatistic(const MatrixT& M,
+                   std::vector<double> w,
                    std::size_t n1,
                    std::size_t n2,
                    bool shuffle,
@@ -41,7 +42,7 @@ long testStatistic(const MatrixT& M,
     long d2 = 0;
     if (method == 'r') {
         // Build range trees
-        std::vector<RTree> trees = buildRangeTrees<MatrixT>(M, n1, n2, s);
+        std::vector<RTree> trees = buildRangeTrees<MatrixT>(M, w, n1, n2, s);
 
         // Compute test statistic using first sample as origins
         for (std::size_t i = 0; i < n1; ++i) {
@@ -78,6 +79,7 @@ long testStatistic(const MatrixT& M,
 // @return FF test statistic
 template<typename MatrixT>
 long testStatistic(const MatrixT& M,
+                   std::vector<double> w,
                    std::size_t n1,
                    std::size_t n2,
                    const std::vector<std::size_t>& s,
@@ -86,7 +88,7 @@ long testStatistic(const MatrixT& M,
     long d2 = 0;
     if (method == 'r') {
         // Build range trees
-        std::vector<RTree> trees = buildRangeTrees<MatrixT>(M, n1, n2, s);
+        std::vector<RTree> trees = buildRangeTrees<MatrixT>(M, w, n1, n2, s);
 
         // Compute test statistic using first sample as origins
         for (std::size_t i = 0; i < n1; ++i) {
@@ -116,22 +118,24 @@ long testStatistic(const MatrixT& M,
 // Simplified wrapper for testStatistic without shuffling
 template<typename MatrixT>
 long testStatistic(const MatrixT& M,
+                   std::vector<double> w,
                    std::size_t r1,
                    std::size_t r2,
                    char method) {
     // prng is unused, just a place holder
     std::mt19937 prng;
-    return testStatistic<MatrixT>(M, r1, r2, false, prng, method);
+    return testStatistic<MatrixT>(M, w, r1, r2, false, prng, method);
 }
 
 // Simplified wrapper for testStatistic with shuffling
 template<typename MatrixT>
 long testStatistic(const MatrixT& M,
+                   std::vector<double> w,
                    std::size_t r1,
                    std::size_t r2,
                    std::mt19937& prng,
                    char method) {
-    return testStatistic<MatrixT>(M, r1, r2, true, prng, method);
+    return testStatistic<MatrixT>(M, w, r1, r2, true, prng, method);
 }
 
 // Compute FF test statistic (callable from R)
@@ -143,8 +147,9 @@ long testStatistic(const MatrixT& M,
 // [[Rcpp::export(ffTestStatistic)]]
 long ffTestStatistic(const NumericMatrix& S1,
                      const NumericMatrix& S2,
+                     std::vector<double> w,
                      char method) {
-    return testStatistic<NumericMatrix>(rbind(S1, S2), S1.nrow(), S2.nrow(), method);
+    return testStatistic<NumericMatrix>(rbind(S1, S2), w, S1.nrow(), S2.nrow(), method);
 }
 
 /*******************************************************************************/
@@ -185,6 +190,8 @@ double permutationTestPvalueSeeded(unsigned int zLess,
 // @return p-value
 IntegerVector permutationTest(const NumericMatrix& S1,
                               const NumericMatrix& S2,
+                              std::vector<double> w,
+
                               unsigned int nPermute,
                               bool verbose,
                               std::mt19937& prng,
@@ -194,13 +201,13 @@ IntegerVector permutationTest(const NumericMatrix& S1,
     NumericMatrix S = rbind(S1, S2);
 
     // Compute test statistic for original data
-    long Z = testStatistic<NumericMatrix>(S, r1, r2, method);
+    long Z = testStatistic<NumericMatrix>(S, w, r1, r2, method);
 
     // Permute data 'nPermute' times and compute test statistic in each case
     unsigned int zGreater = 0, zEqual = 0;
     ProgressBar pbar(nPermute, verbose);
     for (unsigned int i = 0; i < nPermute; ++i) {
-        long z = testStatistic<NumericMatrix>(S, r1, r2, prng, method);
+        long z = testStatistic<NumericMatrix>(S, w, r1, r2, prng, method);
         if (z > Z) {
             ++zGreater;
         } else if (z == Z) {
@@ -218,23 +225,25 @@ IntegerVector permutationTest(const NumericMatrix& S1,
 // [[Rcpp::export(permutationTestSeeded)]]
 IntegerVector permutationTestSeeded(const NumericMatrix& S1,
                                     const NumericMatrix& S2,
+                                    std::vector<double> w,
                                     unsigned int nPermute,
                                     bool verbose,
                                     char method,
                                     int seed) {
     std::mt19937 prng(seed);
-    return permutationTest(S1, S2, nPermute, verbose, prng, method);
+    return permutationTest(S1, S2, w, nPermute, verbose, prng, method);
 }
 
 // Unseeded version of permutationTest (callable from R)
 // [[Rcpp::export(permutationTest)]]
 IntegerVector permutationTest(const NumericMatrix& S1,
                               const NumericMatrix& S2,
+                              std::vector<double> w,
                               unsigned int nPermute,
                               bool verbose,
                               char method) {
     std::mt19937 prng(std::random_device{}());
-    return permutationTest(S1, S2, nPermute, verbose, prng, method);
+    return permutationTest(S1, S2, w, nPermute, verbose, prng, method);
 }
 
 /*******************************************************************************/
@@ -247,6 +256,7 @@ struct PermutationTest : public RcppParallel::Worker {
     /* Inputs */
     // Pooled samples
     const RcppParallel::RMatrix<double> S;
+    const std::vector<double> w;
     // Number of points in first sample
     const std::size_t r1;
     // Number of points in second sample
@@ -262,6 +272,7 @@ struct PermutationTest : public RcppParallel::Worker {
 
     // Constructors
     PermutationTest(const NumericMatrix& S,
+                    std::vector<double> w,
                     std::size_t r1,
                     std::size_t r2,
                     long Z,
@@ -275,7 +286,7 @@ struct PermutationTest : public RcppParallel::Worker {
     void operator()(std::size_t begin, std::size_t end) {
         std::mt19937 prng(std::random_device{}());
         for (std::size_t i = begin; i < end; ++i) {
-            long z = testStatistic<RcppParallel::RMatrix<double> >(S, r1, r2, prng,
+            long z = testStatistic<RcppParallel::RMatrix<double> >(S, w, r1, r2, prng,
                                                                    method);
             zGreater += (z > Z);
             zEqual += (z == Z);
@@ -294,6 +305,7 @@ struct PermutationTestSeeded : public RcppParallel::Worker {
     /* Inputs */
     // Pooled samples
     const RcppParallel::RMatrix<double> S;
+    const std::vector<double> w;
     // Number of points in first sample
     const std::size_t r1;
     // Number of points in second sample
@@ -311,6 +323,7 @@ struct PermutationTestSeeded : public RcppParallel::Worker {
 
     // Constructors
     PermutationTestSeeded(const NumericMatrix& S,
+                          std::vector<double> w,
                           std::size_t r1,
                           std::size_t r2,
                           long Z,
@@ -328,7 +341,7 @@ struct PermutationTestSeeded : public RcppParallel::Worker {
                     std::size_t end) {
         for (std::size_t i = begin; i < end; ++i) {
             std::vector<std::size_t> shuffle = shuffles[i];
-            long z = testStatistic<RcppParallel::RMatrix<double> >(S, r1, r2, shuffle,
+            long z = testStatistic<RcppParallel::RMatrix<double> >(S, w, r1, r2, shuffle,
                                                                    method);
             zGreater += (z > Z);
             zEqual += (z == Z);
@@ -352,6 +365,7 @@ struct PermutationTestSeeded : public RcppParallel::Worker {
 // [[Rcpp::export(permutationTestParallel)]]
 IntegerVector permutationTestParallel(const NumericMatrix& S1,
                                       const NumericMatrix& S2,
+                                      std::vector<double> w,
                                       unsigned int nPermute,
                                       char method) {
     std::size_t r1 = S1.nrow();
@@ -359,10 +373,10 @@ IntegerVector permutationTestParallel(const NumericMatrix& S1,
     NumericMatrix S = rbind(S1, S2);
 
     // Compute test statistic for original data
-    long Z = testStatistic<NumericMatrix>(S, r1, r2, method);
+    long Z = testStatistic<NumericMatrix>(S, w, r1, r2, method);
 
     // Permute data 'nPermute' times and compute test statistic in each case
-    PermutationTest pt(S, r1, r2, Z, method);
+    PermutationTest pt(S, w, r1, r2, Z, method);
     parallelReduce(0, nPermute, pt);
 
     IntegerVector res = {static_cast<int>(pt.zGreater), static_cast<int>(pt.zEqual)};
@@ -380,6 +394,7 @@ IntegerVector permutationTestParallel(const NumericMatrix& S1,
 // [[Rcpp::export(permutationTestParallelSeeded)]]
 IntegerVector permutationTestParallelSeeded(const NumericMatrix& S1,
                                             const NumericMatrix& S2,
+                                            std::vector<double> w,
                                             unsigned int nPermute,
                                             char method,
                                             int seed) {
@@ -399,10 +414,10 @@ IntegerVector permutationTestParallelSeeded(const NumericMatrix& S1,
     }
 
     // Compute test statistic for original data
-    long Z = testStatistic<NumericMatrix>(S, r1, r2, method);
+    long Z = testStatistic<NumericMatrix>(S, w, r1, r2, method);
 
     // Permute data 'nPermute' times and compute test statistic in each case
-    PermutationTestSeeded pt(S, r1, r2, Z, method, shuffles);
+    PermutationTestSeeded pt(S, w, r1, r2, Z, method, shuffles);
     parallelReduce(0, nPermute, pt);
 
     IntegerVector res = {static_cast<int>(pt.zGreater), static_cast<int>(pt.zEqual)};
