@@ -8,8 +8,8 @@
 #include "RangeTree.h"
 #include "matrix_util.h"
 
-typedef RangeTree::RangeTree<double, int> RTree;
-typedef RangeTree::Point<double, int> Point;
+typedef RangeTree::RangeTree<double, double> RTree;
+typedef RangeTree::Point<double, double> Point;
 
 // Build range trees for two samples
 //
@@ -21,6 +21,7 @@ typedef RangeTree::Point<double, int> Point;
 // @return range trees built on each sample
 template<typename MatrixT>
 std::vector<RTree> buildRangeTrees(const MatrixT& M,
+                                   std::vector<double> w,
                                    std::size_t r1,
                                    std::size_t r2,
                                    const std::vector<std::size_t>& s) {
@@ -31,12 +32,12 @@ std::vector<RTree> buildRangeTrees(const MatrixT& M,
 
     // Extract points from first sample
     for (std::size_t i = 0; i < r1; ++i) {
-        pts1.push_back(Point(getRow<MatrixT>(M, s[i]), 0));
+        pts1.push_back(Point(getRow<MatrixT>(M, s[i]), w[i]));
     }
 
     // Extract points from second sample
     for (std::size_t i = 0; i < r2; ++i) {
-        pts2.push_back(Point(getRow<MatrixT>(M, s[i + r1]), 0));
+        pts2.push_back(Point(getRow<MatrixT>(M, s[i + r1]), w[i + r1]));
     }
 
     // Construct range trees
