@@ -362,7 +362,7 @@ namespace RangeTree {
                         if (pointsSortedByCurrentDim[k]->value() != points[i]->value()) {
                             throw std::logic_error("Input points have same position but different values");
                         }
-                        pointsSortedByCurrentDim[k]->increaseCountBy(points[i]->count());
+                        pointsSortedByCurrentDim[k]->increaseCountBy(points[i]->value());
                     } else {
                         pointsSortedByCurrentDim.push_back(points[i]);
                         k++;
@@ -495,7 +495,7 @@ namespace RangeTree {
         std::shared_ptr<RangeTreeNode<T,S> > treeOnNextDim; /**< Tree on the next dimension **/
         Point<T,S>* point; /**< The comparison point **/
         bool isLeaf; /**< Whether or not the point is a leaf **/
-        int pointCountSum; /**< Total number of points, counting multiplicities, at leaves of the tree **/
+        double pointCountSum; /**< Total number of points, counting multiplicities, at leaves of the tree **/
         PointOrdering<T,S> pointOrdering; /**< Helper to totally order input points **/
 
         // For fractional cascading
@@ -505,7 +505,7 @@ namespace RangeTree {
         std::vector<int> pointerToLeqLeft;
         std::vector<int> pointerToGeqRight;
         std::vector<int> pointerToLeqRight;
-        std::vector<int> cumuCountPoints;
+        std::vector<double> cumuCountPoints;
 
     public:
         /**
@@ -524,7 +524,7 @@ namespace RangeTree {
 
             if (spm.numUniquePoints() == 1) {
                 isLeaf = true;
-                pointCountSum = point->count();
+                pointCountSum = point->value();
                 pointsLastDimSorted.push_back((*point)[point->dim() - 1]);
                 if (spm.getCurrentDim() == point->dim() - 2) {
                     spm.moveToNextDimension();
@@ -545,7 +545,7 @@ namespace RangeTree {
                     cumuCountPoints.push_back(0);
                     for (int i = 0; i < allPointsSorted.size(); i++) {
                         pointsLastDimSorted.push_back((*allPointsSorted[i])[dim - 1]);
-                        cumuCountPoints.push_back(cumuCountPoints.back() + allPointsSorted[i]->count());
+                        cumuCountPoints.push_back(cumuCountPoints.back() + allPointsSorted[i]->value());
                     }
                     const auto& leftSorted = left->pointsLastDimSorted;
                     const auto& rightSorted = right->pointsLastDimSorted;
@@ -628,7 +628,7 @@ namespace RangeTree {
         * @return
         */
         RangeTreeNode(Point<T,S>* pointAtLeaf, int compareStartInd) :
-                point(pointAtLeaf), isLeaf(true), pointCountSum(pointAtLeaf->count()), pointOrdering(compareStartInd) {}
+                point(pointAtLeaf), isLeaf(true), pointCountSum(pointAtLeaf->value()), pointOrdering(compareStartInd) {}
 
         /**
         * Total count of points at the leaves of the range tree rooted at this node.
@@ -637,7 +637,7 @@ namespace RangeTree {
         *
         * @return the total count.
         */
-        int totalPoints() const {
+        double totalPoints() const {
             return pointCountSum;
         }
 
@@ -698,7 +698,7 @@ namespace RangeTree {
         * @param upper
         * @return the count.
         */
-        int countInRange(const std::vector<T>& lower,
+        double countInRange(const std::vector<T>& lower,
                          const std::vector<T>& upper) const {
             if (isLeaf) {
                 if (pointInRange(*point, lower, upper)) {
@@ -737,7 +737,7 @@ namespace RangeTree {
                                               pointerToLeqRight[leqInd],
                                               nodes,
                                               inds);
-                int sum = 0;
+                double sum = 0;
                 for (int i = 0; i < nodes.size(); i++) {
                     if (nodes[i]->isLeaf) {
                         sum += nodes[i]->totalPoints();
@@ -762,7 +762,7 @@ namespace RangeTree {
                     right->rightCanonicalNodes(upper, canonicalNodes);
                 }
 
-                int numPointsInRange = 0;
+                double numPointsInRange = 0;
                 for (int i = 0; i < canonicalNodes.size(); i++) {
                     std::shared_ptr<RangeTreeNode<T, S> > node = canonicalNodes[i];
                     if (node->isLeaf) {
@@ -1147,7 +1147,7 @@ namespace RangeTree {
         * @param withUpper as for \withLower but for the upper bounds.
         * @return the number of points in the rectangle.
         */
-        int countInRange(const std::vector<T>& lower,
+        double countInRange(const std::vector<T>& lower,
                          const std::vector<T>& upper,
                          const std::vector<bool>& withLower,
                          const std::vector<bool>& withUpper) const {
@@ -1266,7 +1266,7 @@ namespace RangeTree {
             int count = 0;
             for (int i = 0; i < points.size(); i++) {
                 if (pointInRange(points[i], lower, upper, withLower, withUpper)) {
-                    count += points[i].count();
+                    count += points[i].value();
                 }
             }
             return count;
